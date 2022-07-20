@@ -19,10 +19,11 @@
 #include <grp.h>
 #include <string.h>
 #include <stdlib.h>
-#include <assert.h>
 
 #define MIN(a,b) (((a)<(b))?(a):(b))
 #define MAX(a,b) (((a)>(b))?(a):(b))
+
+#define DPRINT 0
 
 typedef struct Properties {
 	char *permissions;
@@ -34,12 +35,31 @@ typedef struct Properties {
 	char *name;
 } properties;
 
-int getFileInfo(char *name, struct Properties *prop){
+int getFileInfo(char *pathname, char *name, struct Properties *prop){
+	if(DPRINT) printf("getFileInfo begin\n");
+	if(DPRINT) printf("pathname: %s\n", pathname);
+	if(DPRINT) printf("name: %s\n", name);
 	struct tm *timeinfo;
-	char buffer[80];
+	char buffer[80] = {0};
 	struct stat st;
-	stat(name, &st);
+
+	if(strlen(name) > 0){
+		strcat(buffer, pathname);
+		if(pathname[strlen(pathname)] != '/'){
+			strcat(buffer, "/");
+		}
+		strcat(buffer, name);
+		//name
+		prop->name = name;
+	} else {
+		prop->name = pathname;
+		strcat(buffer, pathname);
+	} 
+	stat(buffer, &st);
+
 	
+	if(DPRINT) printf("NAME: %s\n", buffer);
+
 	//permissions	
 	mode_t perm = st.st_mode;
 	prop->permissions = malloc(sizeof(char)*11);
@@ -70,9 +90,16 @@ int getFileInfo(char *name, struct Properties *prop){
 
 	//owner group
 	struct group *g;
+	if(DPRINT) printf("group id %d, name is %s\n", st.st_gid, name);
 	g = getgrgid(st.st_gid);
-	prop->group = malloc(sizeof(g->gr_name));
-	strcpy(prop->group, g->gr_name);
+	if(!g){
+		prop->group = malloc(sizeof(char));
+		strcpy(prop->group, "-"); //temporary patch
+	} else {
+		prop->group = malloc(sizeof(g->gr_name));
+		strcpy(prop->group, g->gr_name);
+	}
+	if(DPRINT) printf("group\n");
 
 	//size
 	prop->size = st.st_size;
@@ -83,9 +110,8 @@ int getFileInfo(char *name, struct Properties *prop){
 	prop->tinfo = malloc(sizeof(char)*sizeof(buffer));
 	strcpy(prop->tinfo, buffer);	
 
-	//name
-	prop->name = name;
 
+	if(DPRINT) printf("getFileInfo end\n");
 }
 
 int len(long a){
@@ -98,6 +124,7 @@ int len(long a){
 
 //print with alignment
 void printFilesProrepties(struct Properties *prop_array, int counter){
+	if(DPRINT) printf("printFilesProrepties begin\n");
 	//get maximum lenght of each parameter
 	int max_link_count = 0,  max_owner_name = 0, max_group_name = 0, max_size = 0;
 	for(int i = 0; i < counter; i++){
@@ -118,6 +145,7 @@ void printFilesProrepties(struct Properties *prop_array, int counter){
 												prop.tinfo, \
 												prop.name);
 	}
+	if(DPRINT) printf("printFilesProrepties end\n");
 	return;
 }
 
@@ -127,8 +155,12 @@ int main(int argc, char *argv[]){
     struct dirent *dir;
     struct stat st;
 	struct tm *timeinfo;
-	char buffer[80];
 	char pathname[80];
+
+	struct Properties *files = malloc(sizeof(properties));
+	int counter = 0;
+	
+	if(DPRINT) printf("main\n");
 
 	if(argc < 2){
 		strcpy(pathname, ".");
@@ -136,39 +168,43 @@ int main(int argc, char *argv[]){
 		strcpy(pathname, argv[1]);
 	}
 
+	if(DPRINT) printf("main 1\n");
 	if(NULL == (d = opendir(pathname))){
 		//can't open directory
 		//it may be regular file
+		if(DPRINT) printf("opendir is NULL\n");
 		if(0 > (stat(pathname, &st))){
 			printf("Can't open a file or a directory\n");
 			return(0);
 		} else {
-			printf("it's a file!\n");
-			
- 			printf("%ld\n", st.st_size);
+			//it's a regular file
+			if(DPRINT) printf("regular file\n");
+			struct Properties prop;
+			getFileInfo(pathname, "", &prop);
+			counter = counter + 1;
+			files[counter-1] = prop;	
+			printFilesProrepties(files, counter);
+			return(0);
 		}
 	}
-        //d = opendir("/home/medalex/test_code/myls/test_folder");
-	/*if((d = opendir("./test_folder")) == NULL){
-		printf("Error");
-		exit(1);
-	}*/
-	
-	
-	struct Properties *files = malloc(sizeof(properties));
-	int counter = 0;
+
+	if(DPRINT) printf("main 2\n");
+
     while((dir = readdir(d)) != NULL){
 		if(dir->d_name[0] == '.'){
 			continue; //no hidden files in 'ls -l' mode.
 		}	
 		struct Properties prop;
-		getFileInfo(dir->d_name, &prop);
+		getFileInfo(pathname, dir->d_name, &prop);
 		counter = counter + 1;
 		files = realloc(files, sizeof(properties)*counter);
 		files[counter-1] = prop;	
     }
+	if(DPRINT) printf("main 3\n");
     closedir(d);
+	if(DPRINT) printf("main 4\n");
 	printFilesProrepties(files, counter);
+	if(DPRINT) printf("main 5\n");
     return(0);
  
 }
